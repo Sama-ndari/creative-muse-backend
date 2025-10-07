@@ -1,10 +1,5 @@
 {
   "version": 2,
-  "functions": {
-    "api/get-muse.js": {
-      "runtime": "@vercel/node"
-    }
-  },
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/$1.js" }
   ]
