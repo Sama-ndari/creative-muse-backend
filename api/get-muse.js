@@ -1,54 +1,115 @@
-// api/get-muse.js
 import fetch from 'node-fetch';
 
-// Allow JSON parsing for POST requests
 export const config = {
-  api: {
-    bodyParser: true,
-  },
+  api: { bodyParser: true },
+  maxDuration: 30,
 };
 
-export default async function handler(req, res) {
-  try {
-    // Default prompt
-    let prompt = "Generate a single, short, and profound creative idea. It could be a poetic thought, a melody idea, a visual prompt for an artist, or a unique story concept. Make it intriguing and concise.";
+const MODELS = [
+  'mistralai/mistral-small-3.1-24b-instruct:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'google/gemma-3-27b-it:free',
+  'mistralai/mistral-nemo',
+];
 
-    // If POST request with a prompt
-    if (req.method === 'POST' && req.body && req.body.prompt) {
-      prompt = req.body.prompt;
-    }
+const MAX_PROMPT_LENGTH = 2000;
+const MAX_TOKENS = 500;
+const TEMPERATURE = 0.7;
+const FETCH_TIMEOUT_MS = 25_000;
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-    console.log('Prompt received:', prompt);
+const DEFAULT_PROMPT =
+  'Generate a single, short, and profound creative idea. ' +
+  'It could be a poetic thought, a melody idea, a visual prompt for an artist, ' +
+  'or a unique story concept. Make it intriguing and concise.';
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://your-vercel-project.vercel.app', // optional but recommended
-        'X-Title': 'Creative Muse API', // optional
-      },
-      body: JSON.stringify({
-        model: 'mistralai/mistral-7b-instruct',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 100,
-        temperature: 1.1,
-      }),
-    });
+function abortAfter(ms) {
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), ms);
+  return controller.signal;
+}
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('OpenRouter Error:', errorText);
-      throw new Error(`OpenRouter call failed: ${response.status}`);
-    }
+async function callModel(model, prompt, apiKey) {
+  const res = await fetch(OPENROUTER_URL, {
+    method: 'POST',
+    signal: abortAfter(FETCH_TIMEOUT_MS),
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://creative-muse-backend.vercel.app',
+      'X-Title': 'Creative Muse API',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: MAX_TOKENS,
+      temperature: TEMPERATURE,
+    }),
+  });
 
-    const data = await response.json();
-    const muse = data?.choices?.[0]?.message?.content?.trim() || 'No creative muse returned.';
-
-    return res.status(200).json({ muse });
-
-  } catch (err) {
-    console.error('Backend Error:', err);
-    return res.status(500).json({ error: 'Internal server error occurred.' });
+  if (res.status === 429) return { retry: true, status: 429 };
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    return { retry: false, status: res.status, error: text };
   }
+
+  const data = await res.json();
+  let content = data?.choices?.[0]?.message?.content?.trim();
+  if (!content) return { retry: false, status: 200, error: 'Empty response from model' };
+
+  content = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+
+  return { ok: true, muse: content, model };
+}
+
+export default async function handler(req, res) {
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    console.error('[get-muse] OPENROUTER_API_KEY is not set');
+    return res.status(500).json({ error: 'Server misconfiguration' });
+  }
+
+  let prompt = DEFAULT_PROMPT;
+  if (req.method === 'POST' && req.body?.prompt) {
+    if (typeof req.body.prompt !== 'string') {
+      return res.status(400).json({ error: 'prompt must be a string' });
+    }
+    prompt = req.body.prompt.trim().slice(0, MAX_PROMPT_LENGTH);
+    if (!prompt) {
+      return res.status(400).json({ error: 'prompt cannot be empty' });
+    }
+  }
+
+  for (const model of MODELS) {
+    try {
+      const result = await callModel(model, prompt, apiKey);
+
+      if (result.ok) {
+        return res.status(200).json({ muse: result.muse, model: result.model });
+      }
+
+      if (result.retry) continue;
+
+      console.error(`[get-muse] ${model} failed (${result.status}): ${result.error}`);
+      return res.status(502).json({
+        error: 'AI provider error',
+        detail: `Model ${model} returned ${result.status}`,
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        console.error(`[get-muse] ${model} timed out`);
+        continue;
+      }
+      console.error(`[get-muse] ${model} exception:`, err.message);
+      continue;
+    }
+  }
+
+  return res.status(503).json({
+    error: 'All AI models are temporarily unavailable. Please retry shortly.',
+  });
 }
