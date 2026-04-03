@@ -6,10 +6,10 @@ export const config = {
 };
 
 const MODELS = [
-  'mistralai/mistral-small-3.1-24b-instruct:free',
   'meta-llama/llama-3.3-70b-instruct:free',
   'google/gemma-3-27b-it:free',
-  'mistralai/mistral-nemo',
+  'nvidia/nemotron-nano-9b-v2:free',
+  'google/gemma-3-12b-it:free',
 ];
 
 const MAX_PROMPT_LENGTH = 2000;
@@ -95,10 +95,7 @@ export default async function handler(req, res) {
       if (result.retry) continue;
 
       console.error(`[get-muse] ${model} failed (${result.status}): ${result.error}`);
-      return res.status(502).json({
-        error: 'AI provider error',
-        detail: `Model ${model} returned ${result.status}`,
-      });
+      continue;
     } catch (err) {
       if (err.name === 'AbortError') {
         console.error(`[get-muse] ${model} timed out`);
