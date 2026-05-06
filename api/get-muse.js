@@ -17,6 +17,8 @@ const MAX_TOKENS = 500;
 const TEMPERATURE = 0.7;
 const FETCH_TIMEOUT_MS = 12_000;
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 2000;
 
 const DEFAULT_PROMPT =
   'Generate a single, short, and profound creative idea. ' +
@@ -27,6 +29,10 @@ function abortAfter(ms) {
   const controller = new AbortController();
   setTimeout(() => controller.abort(), ms);
   return controller.signal;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function callModel(model, prompt, apiKey) {
@@ -50,16 +56,41 @@ async function callModel(model, prompt, apiKey) {
   if (res.status === 429) return { retry: true, status: 429 };
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    return { retry: false, status: res.status, error: text };
+    return { retry: true, status: res.status, error: text };
   }
 
   const data = await res.json();
   let content = data?.choices?.[0]?.message?.content?.trim();
-  if (!content) return { retry: false, status: 200, error: 'Empty response from model' };
+  if (!content) return { retry: true, status: 200, error: 'Empty response from model' };
 
   content = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
 
   return { ok: true, muse: content, model };
+}
+
+async function tryAllModels(prompt, apiKey) {
+  for (const model of MODELS) {
+    try {
+      const result = await callModel(model, prompt, apiKey);
+
+      if (result.ok) return result;
+      if (result.retry) {
+        console.error(`[get-muse] ${model} → ${result.status}, trying next`);
+        continue;
+      }
+
+      console.error(`[get-muse] ${model} failed (${result.status}): ${result.error}`);
+      continue;
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        console.error(`[get-muse] ${model} timed out`);
+      } else {
+        console.error(`[get-muse] ${model} exception:`, err.message);
+      }
+      continue;
+    }
+  }
+  return null;
 }
 
 export default async function handler(req, res) {
@@ -84,25 +115,16 @@ export default async function handler(req, res) {
     }
   }
 
-  for (const model of MODELS) {
-    try {
-      const result = await callModel(model, prompt, apiKey);
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const result = await tryAllModels(prompt, apiKey);
 
-      if (result.ok) {
-        return res.status(200).json({ muse: result.muse, model: result.model });
-      }
+    if (result?.ok) {
+      return res.status(200).json({ muse: result.muse, model: result.model });
+    }
 
-      if (result.retry) continue;
-
-      console.error(`[get-muse] ${model} failed (${result.status}): ${result.error}`);
-      continue;
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        console.error(`[get-muse] ${model} timed out`);
-        continue;
-      }
-      console.error(`[get-muse] ${model} exception:`, err.message);
-      continue;
+    if (attempt < MAX_RETRIES) {
+      console.error(`[get-muse] Attempt ${attempt}/${MAX_RETRIES} failed, retrying in ${RETRY_DELAY_MS}ms...`);
+      await sleep(RETRY_DELAY_MS);
     }
   }
 
