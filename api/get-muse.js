@@ -7,15 +7,16 @@ export const config = {
 
 const MODELS = [
   'nvidia/nemotron-nano-9b-v2:free',
-  'google/gemma-3-12b-it:free',
-  'google/gemma-3-27b-it:free',
+  'google/gemma-4-26b-a4b-it:free',
   'meta-llama/llama-3.3-70b-instruct:free',
+  'qwen/qwen3-coder:free',
+  'openai/gpt-oss-20b:free',
 ];
 
 const MAX_PROMPT_LENGTH = 2000;
 const MAX_TOKENS = 500;
 const TEMPERATURE = 0.7;
-const FETCH_TIMEOUT_MS = 12_000;
+const FETCH_TIMEOUT_MS = 8_000;
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 2000;
