@@ -2,20 +2,20 @@ import fetch from 'node-fetch';
 
 export const config = {
   api: { bodyParser: true },
-  maxDuration: 30,
+  maxDuration: 60,
 };
 
 const MODELS = [
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'google/gemma-3-27b-it:free',
   'nvidia/nemotron-nano-9b-v2:free',
   'google/gemma-3-12b-it:free',
+  'google/gemma-3-27b-it:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
 ];
 
 const MAX_PROMPT_LENGTH = 2000;
 const MAX_TOKENS = 500;
 const TEMPERATURE = 0.7;
-const FETCH_TIMEOUT_MS = 25_000;
+const FETCH_TIMEOUT_MS = 6_000;
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 const DEFAULT_PROMPT =
