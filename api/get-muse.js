@@ -15,7 +15,7 @@ const MODELS = [
 const MAX_PROMPT_LENGTH = 2000;
 const MAX_TOKENS = 500;
 const TEMPERATURE = 0.7;
-const FETCH_TIMEOUT_MS = 6_000;
+const FETCH_TIMEOUT_MS = 12_000;
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 const DEFAULT_PROMPT =
