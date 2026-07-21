@@ -5,8 +5,9 @@ Lightweight Vercel serverless API that proxies AI prompts through [OpenRouter](h
 ## How it works
 
 ```
-Flutter app  --->  /api/get-muse  --->  OpenRouter  --->  AI Model
-             POST {prompt}               (proxy)        Mistral / Llama / Gemma
+Flutter app  --->  /api/get-muse          --->  OpenRouter  --->  Free AI models
+             --->  /api/get-muse-premium  --->  OpenAI      --->  GPT-4o / GPT-4o-mini
+             POST {prompt}
 ```
 
 The handler tries multiple models with automatic fallback:
@@ -50,6 +51,48 @@ If a free model is rate-limited (429), it falls back to the next one automatical
 
 Returns a random creative idea using the default prompt.
 
+### `POST /api/get-muse-premium`
+
+Same request shape as the free endpoint, but routes through the **OpenAI API** directly for higher-quality responses.
+
+**Required header:**
+
+```
+X-Premium-Key: your-secret-premium-key
+```
+
+**Request:**
+
+```json
+{
+  "prompt": "Write a professional notification in FR/EN/SW...",
+  "model": "gpt-4o"
+}
+```
+
+`model` is optional. If omitted, the server uses `OPENAI_MODEL` (default `gpt-4o-mini`). Only models in the server allowlist are accepted.
+
+**Response (200):**
+
+```json
+{ "muse": "AI-generated text", "model": "gpt-4o-mini", "tier": "premium" }
+```
+
+**Errors:**
+
+| Status | Meaning |
+|--------|---------|
+| 400 | Invalid prompt, empty prompt, or disallowed `model` |
+| 401 | Missing or invalid `X-Premium-Key` |
+| 405 | Wrong HTTP method |
+| 500 | Server misconfiguration (missing `OPENAI_API_KEY` or `PREMIUM_API_KEY`) |
+| 502 | OpenAI returned an error |
+| 503 | Service temporarily unavailable after retries |
+
+### `GET /api/get-muse-premium`
+
+Returns a random creative idea using the default prompt and default premium model (`OPENAI_MODEL`).
+
 ## Setup
 
 ### 1. Clone
@@ -68,6 +111,15 @@ Set it in Vercel: **Project Settings > Environment Variables**
 
 ```
 OPENROUTER_API_KEY=sk-or-v1-xxxx
+OPENAI_API_KEY=sk-xxxx
+PREMIUM_API_KEY=your-secret-premium-key
+```
+
+Optional:
+
+```
+OPENAI_MODEL=gpt-4o
+OPENAI_ALLOWED_MODELS=gpt-4o-mini,gpt-4o,gpt-4.1-mini,gpt-4.1
 ```
 
 ### 3. Deploy
@@ -84,26 +136,34 @@ Or push to GitHub with Vercel Git integration enabled.
 curl -X POST https://creative-muse-backend.vercel.app/api/get-muse \
   -H "Content-Type: application/json" \
   -d '{"prompt": "Say hello in French and English as JSON"}'
+
+curl -X POST https://creative-muse-backend.vercel.app/api/get-muse-premium \
+  -H "Content-Type: application/json" \
+  -H "X-Premium-Key: your-secret-premium-key" \
+  -d '{"prompt": "Say hello in French and English as JSON", "model": "gpt-4o"}'
 ```
 
 ## Configuration
 
-All config is in `api/get-muse.js`:
-
-| Constant | Default | Purpose |
-|----------|---------|---------|
-| `MODELS` | 4 models | Ordered fallback list |
-| `MAX_PROMPT_LENGTH` | 2000 | Input truncation limit |
-| `MAX_TOKENS` | 500 | Max response tokens |
-| `TEMPERATURE` | 0.7 | Creativity level (0-2) |
-| `FETCH_TIMEOUT_MS` | 25s | Per-model timeout |
+| File | Constant | Default | Purpose |
+|------|----------|---------|---------|
+| `api/get-muse.js` | `MODELS` | 5 free models | Ordered fallback list |
+| `api/get-muse.js` | `FETCH_TIMEOUT_MS` | 8s | Per-model timeout |
+| `api/get-muse-premium.js` | `OPENAI_MODEL` | `gpt-4o-mini` | Default model when client omits `model` |
+| `api/get-muse-premium.js` | `OPENAI_ALLOWED_MODELS` | 4 GPT models | Allowlist for client `model` override |
+| `api/get-muse-premium.js` | `MAX_TOKENS` | 2000 | Max response tokens |
+| `api/_shared/muse-utils.js` | `MAX_PROMPT_LENGTH` | 2000 | Input truncation limit |
+| `api/_shared/muse-utils.js` | `TEMPERATURE` | 0.7 | Creativity level (0-2) |
 
 ## Project structure
 
 ```
 api/
-  get-muse.js       # Serverless handler (single endpoint)
-.env.example        # Required env vars
-package.json        # Dependencies
-vercel.json         # Routing config
+  _shared/
+    muse-utils.js         # Shared prompt parsing and helpers
+  get-muse.js             # Free tier (OpenRouter)
+  get-muse-premium.js     # Premium tier (OpenAI)
+.env.example              # Required env vars
+package.json              # Dependencies
+vercel.json               # Routing config
 ```

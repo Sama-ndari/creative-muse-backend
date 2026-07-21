@@ -1,5 +1,14 @@
 import fetch from 'node-fetch';
 
+import {
+  MAX_TOKENS,
+  TEMPERATURE,
+  abortAfter,
+  resolvePrompt,
+  sleep,
+  stripMarkdownFences,
+} from './_shared/muse-utils.js';
+
 export const config = {
   api: { bodyParser: true },
   maxDuration: 60,
@@ -13,28 +22,10 @@ const MODELS = [
   'openai/gpt-oss-20b:free',
 ];
 
-const MAX_PROMPT_LENGTH = 2000;
-const MAX_TOKENS = 500;
-const TEMPERATURE = 0.7;
 const FETCH_TIMEOUT_MS = 8_000;
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 2000;
-
-const DEFAULT_PROMPT =
-  'Generate a single, short, and profound creative idea. ' +
-  'It could be a poetic thought, a melody idea, a visual prompt for an artist, ' +
-  'or a unique story concept. Make it intriguing and concise.';
-
-function abortAfter(ms) {
-  const controller = new AbortController();
-  setTimeout(() => controller.abort(), ms);
-  return controller.signal;
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 async function callModel(model, prompt, apiKey) {
   const res = await fetch(OPENROUTER_URL, {
@@ -64,7 +55,7 @@ async function callModel(model, prompt, apiKey) {
   let content = data?.choices?.[0]?.message?.content?.trim();
   if (!content) return { retry: true, status: 200, error: 'Empty response from model' };
 
-  content = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  content = stripMarkdownFences(content);
 
   return { ok: true, muse: content, model };
 }
@@ -105,16 +96,11 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server misconfiguration' });
   }
 
-  let prompt = DEFAULT_PROMPT;
-  if (req.method === 'POST' && req.body?.prompt) {
-    if (typeof req.body.prompt !== 'string') {
-      return res.status(400).json({ error: 'prompt must be a string' });
-    }
-    prompt = req.body.prompt.trim().slice(0, MAX_PROMPT_LENGTH);
-    if (!prompt) {
-      return res.status(400).json({ error: 'prompt cannot be empty' });
-    }
+  const resolved = resolvePrompt(req);
+  if (resolved.error) {
+    return res.status(resolved.status).json({ error: resolved.error });
   }
+  const { prompt } = resolved;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     const result = await tryAllModels(prompt, apiKey);
