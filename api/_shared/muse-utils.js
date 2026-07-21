@@ -5,6 +5,23 @@ export const MAX_TOKENS = 500;
 export const TEMPERATURE = 0.7;
 export const PREMIUM_KEY_HEADER = 'x-premium-key';
 
+const CORS_ALLOW_HEADERS = 'Content-Type, X-Premium-Key';
+const CORS_ALLOW_METHODS = 'POST, OPTIONS';
+
+/** Set CORS headers and handle browser preflight. Returns true if OPTIONS was handled. */
+export function applyCors(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', CORS_ALLOW_METHODS);
+  res.setHeader('Access-Control-Allow-Headers', CORS_ALLOW_HEADERS);
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return true;
+  }
+
+  return false;
+}
+
 export const DEFAULT_PROMPT =
   'Generate a single, short, and profound creative idea. ' +
   'It could be a poetic thought, a melody idea, a visual prompt for an artist, ' +
