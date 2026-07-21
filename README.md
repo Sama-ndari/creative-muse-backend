@@ -93,6 +93,48 @@ X-Premium-Key: your-secret-premium-key
 
 Returns a random creative idea using the default prompt and default premium model (`OPENAI_MODEL`).
 
+### `POST /api/me-chat`
+
+Personal AI clone chat (multi-turn, RAG context). Same auth as premium.
+
+**Required header:**
+
+```
+X-Premium-Key: your-secret-premium-key
+```
+
+**Request:**
+
+```json
+{
+  "message": "What is Ijwi ry'Ikirundi AI?",
+  "history": [
+    { "role": "user", "content": "Hello" },
+    { "role": "assistant", "content": "Hi! ..." }
+  ]
+}
+```
+
+**Response (200):**
+
+```json
+{ "reply": "...", "model": "gpt-4o-mini" }
+```
+
+**Errors:**
+
+| Status | Meaning |
+|--------|---------|
+| 400 | Invalid message or history |
+| 401 | Missing or invalid `X-Premium-Key` |
+| 405 | Wrong HTTP method |
+| 500 | Server misconfiguration |
+| 502 | OpenAI returned an error |
+
+Knowledge base: edit `api/_shared/me-knowledge.js` by hand (sections + `CUSTOM` block).
+
+**Env:** `OPENAI_API_KEY`, `PREMIUM_API_KEY`.
+
 ## Setup
 
 ### 1. Clone
@@ -141,6 +183,11 @@ curl -X POST https://creative-muse-backend.vercel.app/api/get-muse-premium \
   -H "Content-Type: application/json" \
   -H "X-Premium-Key: your-secret-premium-key" \
   -d '{"prompt": "Say hello in French and English as JSON", "model": "gpt-4o"}'
+
+curl -X POST https://creative-muse-backend.vercel.app/api/me-chat \
+  -H "Content-Type: application/json" \
+  -H "X-Premium-Key: your-secret-premium-key" \
+  -d '{"message": "What is Ijwi ry'\''Ikirundi AI?", "history": []}'
 ```
 
 ## Configuration
@@ -161,8 +208,11 @@ curl -X POST https://creative-muse-backend.vercel.app/api/get-muse-premium \
 api/
   _shared/
     muse-utils.js         # Shared prompt parsing and helpers
+    me-chat-utils.js      # Personal AI chat helpers
+    me-knowledge.js       # Personal AI knowledge (edit by hand)
   get-muse.js             # Free tier (OpenRouter)
   get-muse-premium.js     # Premium tier (OpenAI)
+  me-chat.js              # Personal AI clone chat
 .env.example              # Required env vars
 package.json              # Dependencies
 vercel.json               # Routing config
