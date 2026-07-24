@@ -97,6 +97,8 @@ Returns a random creative idea using the default prompt and default premium mode
 
 Personal AI clone chat (multi-turn, RAG context). Same auth as premium.
 
+Answers only questions about the person in the knowledge base (career, projects, skills, personality). Off-topic requests (general coding help, homework, unrelated topics) get a polite refusal and a contact redirect.
+
 **Required header:**
 
 ```
